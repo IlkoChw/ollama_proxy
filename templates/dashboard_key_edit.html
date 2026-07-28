@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}edit key / ollama_proxy{% endblock %}
+{% block body %}
+<table width="600" border="1" cellpadding="6" cellspacing="0" bgcolor="#ffffff">
+<tr><td>
+<h2 align="center">edit key #{{ key.id }}</h2>
+<p><tt>{{ key.key_preview }}</tt> — created <tt>{{ key.created_at | fmt_ts }}</tt>, updated <tt>{{ key.updated_at | fmt_ts }}</tt></p>
+</td></tr>
+{% if error %}
+<tr><td><p><b>ERROR:</b> {{ error }}</p></td></tr>
+{% endif %}
+{% if flash %}
+<tr><td>
+{% if flash.level == "ok" %}<p><b>OK:</b> {{ flash.msg }}</p>
+{% else %}<p><b>ERROR:</b> {{ flash.msg }}</p>
+{% endif %}
+</td></tr>
+{% endif %}
+<tr><td>
+<form method="post" action="/dashboard/keys/{{ key.id }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="_method" value="patch">
+<table border="0" cellpadding="3" cellspacing="0">
+<tr>
+<td align="right"><tt>label:</tt></td>
+<td><input type="text" name="label" size="40" maxlength="255" value="{{ key.label or '' }}"></td>
+</tr>
+<tr>
+<td align="right"><tt>status:</tt></td>
+<td>
+<select name="status">
+{% for s in valid_statuses %}
+<option value="{{ s }}" {% if s == key.status %}selected{% endif %}>{{ s }}</option>
+{% endfor %}
+</select>
+</td>
+</tr>
+<tr>
+<td colspan="2" align="right">
+<input type="submit" value=" Save " class="btn">
+<a class="btn-link" href="/dashboard">[ cancel ]</a>
+</td>
+</tr>
+</table>
+</form>
+</td></tr>
+<tr><td>
+<form method="post" action="/dashboard/keys/{{ key.id }}/delete"
+      onsubmit="return confirm('delete key {{ key.id }} ({{ key.key_preview }})?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="submit" value=" Delete this key " class="btn">
+</form>
+</td></tr>
+</table>
+{% endblock %}

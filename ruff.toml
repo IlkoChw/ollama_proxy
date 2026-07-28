@@ -1,0 +1,32 @@
+target-version = "py312"
+line-length = 100
+extend-exclude = [
+    "references",
+    "data",
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__",
+]
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "ASYNC",  # flake8-async
+    "S",   # flake8-bandit (security)
+    "C4",  # flake8-comprehensions
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "S101",  # use of assert (pytest uses assert)
+]
+
+[lint.per-file-ignores]
+"tests/**/*.py" = ["S", "B011"]
+"app/main.py" = ["B008"]

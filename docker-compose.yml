@@ -1,0 +1,33 @@
+services:
+  ollama-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ollama_proxy:0.1.0
+    container_name: ollama-proxy
+    ports:
+      - "8000:8000"
+    # env_file is optional. Copy .env.example to .env to override
+      # defaults from the Settings class (see app/core/config.py).
+      #
+      # Set ``ENABLE_DASHBOARD=1`` in the environment to mount the
+      # dashboard under ``/dashboard/*`` in this same process. With
+      # the flag off the image serves only the proxy API + admin
+      # endpoints.
+    env_file:
+      - .env
+    volumes:
+      - ./data:/home/app/data
+      # Bind-mount templates and CSS so dev iterations on those
+      # files don't need an image rebuild. The Dockerfile still
+      # creates the target directories so the container starts
+      # even if no volume is mounted (e.g. in CI).
+      - ./templates:/home/app/templates:ro
+      - ./app/static/dashboard:/home/app/app/static/dashboard:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

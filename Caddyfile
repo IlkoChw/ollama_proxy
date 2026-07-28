@@ -1,0 +1,13 @@
+{
+    email {$CADDY_EMAIL}
+}
+
+https://{$CADDY_DOMAIN} {
+    encode zstd gzip
+
+    reverse_proxy ollama-proxy:8000 {
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-Host {host}
+    }
+}

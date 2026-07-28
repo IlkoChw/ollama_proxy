@@ -1,0 +1,190 @@
+/* web 1.0 / Win9x look for the ollama_proxy dashboard.
+ *
+ * Goals:
+ *   - System-grey background, white "card", 1px black borders.
+ *   - 3D buttons (outset/inset).
+ *   - Monospace values for any field that carries an id, key
+ *     preview, or timestamp.
+ *   - Zero animations, zero JS, zero fancy fonts.
+ *
+ * Browser support: anything that has shipped in the last 15 years.
+ */
+
+body {
+    font-family: "MS Sans Serif", "Tahoma", sans-serif;
+    font-size: 13px;
+    color: #000000;
+    margin: 12px 0 0 0;
+}
+
+table {
+    border-color: #000000;
+    color: #000000;
+}
+
+td, th {
+    font-size: 13px;
+}
+
+h2 {
+    font-size: 16px;
+    margin: 4px 0 6px 0;
+}
+
+a {
+    color: #0000ee;
+    text-decoration: underline;
+}
+
+a:visited {
+    color: #551a8b;
+}
+
+hr {
+    border: 0;
+    border-top: 1px solid #808080;
+    margin: 6px 0;
+}
+
+tt {
+    font-family: "Lucida Console", "Consolas", monospace;
+    font-size: 12px;
+    color: #000000;
+}
+
+/* 3D push button in the Win9x style. */
+.btn,
+.btn-link {
+    /* Cancel UA button styling on <input type="submit"> and the
+     * baseline/on-link metrics on <a> so the two element types render
+     * identically. Without these, the anchor appears narrower/
+     * differently aligned than the surrounding input buttons. */
+    appearance: none;
+    -webkit-appearance: none;
+    box-sizing: border-box;
+    line-height: normal;
+    font-family: "MS Sans Serif", "Tahoma", sans-serif;
+    font-size: 12px;
+    background-color: #c0c0c0;
+    color: #000000;
+    border-top: 2px solid #ffffff;
+    border-left: 2px solid #ffffff;
+    border-right: 2px solid #404040;
+    border-bottom: 2px solid #404040;
+    padding: 1px 8px;
+    margin: 0;
+    cursor: pointer;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.btn:active,
+.btn-link:active {
+    border-top: 2px solid #404040;
+    border-left: 2px solid #404040;
+    border-right: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+}
+
+/* Anchor-as-button variant: keep the link clickable, drop the
+ * underline + visited colour, render with the same 3D outset/inset
+ * frame as ``.btn`` inputs. Used for actions that need to navigate
+ * (e.g. "[ add key ]", "[edit]") so they look consistent with
+ * neighbouring submit buttons while staying zero-JS. */
+.btn-link {
+    display: inline-block;
+    text-decoration: none;
+}
+
+.btn-link:visited {
+    color: #000000;
+}
+
+/* Active filter chip in the dashboard's status-filter bar. Inverts
+ * the .btn-link look (white bg, dark border, recessed shadow on top
+ * / left) so the currently selected filter is obvious next to the
+ * other buttons. Zero-JS — the template marks the active chip with
+ * a ``<span class="filter-active">`` and the rest stay anchors. */
+.filter-active {
+    display: inline-block;
+    font-family: "MS Sans Serif", "Tahoma", sans-serif;
+    font-size: 12px;
+    color: #000000;
+    background-color: #ffffff;
+    border-top: 2px solid #404040;
+    border-left: 2px solid #404040;
+    border-right: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+    padding: 1px 8px;
+    margin: 0;
+    box-sizing: border-box;
+    line-height: normal;
+    vertical-align: middle;
+}
+
+/* Plain inputs get a recessed 3D look. */
+input[type="text"],
+input[type="password"],
+textarea,
+select {
+    font-family: "MS Sans Serif", "Tahoma", sans-serif;
+    font-size: 12px;
+    background-color: #ffffff;
+    color: #000000;
+    border-top: 2px solid #404040;
+    border-left: 2px solid #404040;
+    border-right: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+    padding: 1px 3px;
+}
+
+textarea {
+    font-family: "Lucida Console", "Consolas", monospace;
+}
+
+/* Win9x-style progress bar: inset 3D frame, grey track, navy fill.
+ *
+ * Used by the dashboard to render ollama.com ``/api/usage`` fractions.
+ * The fill width is set inline (``style="width: NN%"``) by the
+ * template; values come straight from upstream as floats in [0, 1].
+ * The track has a min-width so an empty bar is still visible, and a
+ * fixed height to align with adjacent table rows.
+ */
+.progress {
+    display: inline-block;
+    vertical-align: middle;
+    width: 160px;
+    height: 14px;
+    background-color: #ffffff;
+    border-top: 2px solid #404040;
+    border-left: 2px solid #404040;
+    border-right: 2px solid #ffffff;
+    border-bottom: 2px solid #ffffff;
+    box-sizing: border-box;
+    margin: 0 6px 0 0;
+    padding: 0;
+    overflow: hidden;
+}
+.progress > .progress-fill {
+    display: block;
+    height: 100%;
+    background-color: #000080;
+    /* ``width`` set by template; default to 0 so the bar is just a track. */
+    width: 0;
+}
+.progress-near-full > .progress-fill {
+    background-color: #c00000;
+}
+.progress-label {
+    font-family: "Lucida Console", "Consolas", monospace;
+    font-size: 12px;
+}
+
+/* Compact variant for the dashboard table: inline next to the
+ * ``req / fail`` column so it doesn't dominate the row. Width matches
+ * the labels "24h: X.X%" / "7d: X.X%" next to it. */
+.progress.compact {
+    width: 80px;
+    height: 10px;
+    margin-right: 4px;
+}

@@ -1,0 +1,41 @@
+# pyproject.toml — project metadata + tool configuration for ollama_proxy.
+#
+# Runtime + dev Python dependencies are declared directly in
+# ``requirements.txt`` (the canonical lockfile with hash-pinning via
+# ``--require-hashes``). ``pyproject.toml`` is intentionally lean: it
+# advertises the minimum supported Python version to IDEs
+# (PyCharm / Pyright) and configures ruff + pytest.
+#
+# PEP 604 type unions (X | Y) and lowercase generics (list[...],
+# dict[...]) are valid from 3.10 onwards, which matches the Dockerfile
+# base image (python:3.12-slim).
+
+[project]
+name = "ollama_proxy"
+version = "0.1.0"
+description = "FastAPI proxy for ollama.com with API-key rotation."
+requires-python = ">=3.10"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    "data",
+    ".venv",
+    "venv",
+]
+
+[tool.ruff.lint]
+# Project-wide defaults. UP rules stay on (they enforce PEP 604 /
+# lowercase generics, which is exactly what this codebase uses). E and
+# F are pyflakes basics; W is pycodestyle warnings.
+select = ["E", "F", "W", "UP", "I", "B", "SIM"]
+ignore = [
+    # We use `Bearer` placeholders in tests / fakes; long lines are
+    # easier to read than wrapped.
+    "E501",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

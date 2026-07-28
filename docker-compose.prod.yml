@@ -1,0 +1,86 @@
+# Production compose for ollama_proxy.
+#
+# This file is self-contained — it does NOT inherit from
+# docker-compose.yml. Run it directly:
+#
+#   CADDY_DOMAIN=proxy.example.com CADDY_EMAIL=admin@example.com \
+#       docker compose -f docker-compose.prod.yml up -d
+#
+# (or simply `docker compose -f docker-compose.prod.yml up -d` after
+# exporting the env vars in your shell).
+#
+# What is different from docker-compose.yml:
+#
+# 1. **Caddy is mandatory, not optional.** The service is configured
+#    without a ``profiles:`` key, so it starts unconditionally under
+#    ``docker compose up``. The Caddyfile is the same TLS-ALPN-01
+#    file used in dev.
+#
+# 2. **The app is hidden from the host.** ``ollama-proxy`` has no
+#    ``ports:`` mapping at all — no ``8000:8000``, nothing. Caddy
+#    still reaches the upstream via the ``proxy-net`` docker network
+#    on port 8000 (internal). Operators cannot SSH-tunnel
+#    ``localhost:8000`` to bypass TLS.
+#
+# 3. **Only :443 is published.** No port 80 is exposed: TLS-ALPN-01
+#    ACME challenges are served inside the TLS handshake on :443
+#    itself, so we don't need HTTP for certificate issuance.
+#
+# Operator requirement: ``CADDY_DOMAIN`` and ``CADDY_EMAIL`` MUST be
+# set in the environment (or .env) before bringing the stack up.
+# Caddy fail-closes if they are empty.
+
+services:
+  ollama-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ollama_proxy:0.1.0
+    container_name: ollama-proxy
+    # No host ports — the app is reachable ONLY through Caddy on :443.
+    # Caddy connects to ``ollama-proxy:8000`` via the ``proxy-net``
+    # docker network.
+    env_file:
+      - .env
+    volumes:
+      - ./data:/home/app/data
+      - ./templates:/home/app/templates:ro
+      - ./app/static/dashboard:/home/app/app/static/dashboard:ro
+    networks:
+      - proxy-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: ollama-proxy-caddy
+    # No ``profiles:`` — Caddy is always started.
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    environment:
+      # Wired into the Caddyfile as ``{$CADDY_DOMAIN}`` /
+      # ``{$CADDY_EMAIL}`` (Caddyfile env-var substitution). See .env.example.
+      CADDY_DOMAIN: ${CADDY_DOMAIN:-}
+      CADDY_EMAIL: ${CADDY_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - proxy-net
+    depends_on:
+      - ollama-proxy
+
+networks:
+  proxy-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}dashboard / ollama_proxy{% endblock %}
+{% block body %}
+<table width="780" border="1" cellpadding="6" cellspacing="0" bgcolor="#ffffff">
+<tr><td>
+<h2 align="center">ollama_proxy / dashboard</h2>
+<hr>
+<table border="0" width="100%"><tr>
+<td align="left" style="white-space: nowrap"><a class="btn-link" href="/dashboard/keys/new">add key</a></td>
+<td align="center" style="white-space: nowrap">
+<form method="post" action="/dashboard/keys/refresh-health" style="display:inline">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="submit" value=" Refresh health " class="btn">
+</form>
+</td>
+<td align="right" style="white-space: nowrap">
+<form method="post" action="/dashboard/logout" style="display:inline">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="submit" value=" Logout " class="btn">
+</form>
+</td>
+</tr></table>
+</td></tr>
+
+{% if flash %}
+<tr><td>
+{% if flash.level == "ok" %}<p><b>OK:</b> {{ flash.msg }}</p>
+{% else %}<p><b>ERROR:</b> {{ flash.msg }}</p>
+{% endif %}
+</td></tr>
+{% endif %}
+
+{% if error %}
+<tr><td><p><b>ERROR:</b> {{ error }}</p></td></tr>
+{% endif %}
+
+<tr><td>
+<table border="0" width="100%" cellpadding="3" cellspacing="0"><tr>
+<td style="white-space: nowrap">
+<b>filter:</b>
+{% for s in statuses %}
+{% if s == current_status %}
+<span class="filter-active">[ {{ s }} ]</span>
+{% else %}
+<a class="btn-link" href="/dashboard?status={{ s }}">{{ s }}</a>
+{% endif %}
+{% endfor %}
+</td>
+<td align="right" style="white-space: nowrap">
+<tt>showing {{ keys | length }} of {{ total_keys }}</tt>
+</td>
+</tr></table>
+</td></tr>
+
+<tr><td>
+<table border="1" cellpadding="3" cellspacing="0" width="100%" bgcolor="#ffffff">
+<tr bgcolor="#c0c0c0">
+<th><tt>id</tt></th>
+<th><tt>label</tt></th>
+<th><tt>preview</tt></th>
+<th><tt>status</tt></th>
+<th><tt>last used</tt></th>
+<th><tt>last code</tt></th>
+<th><tt>cooldown</tt></th>
+<th><tt>req / fail</tt></th>
+<th>usage (session / weekly)</th>
+<th>actions</th>
+</tr>
+{% if keys %}
+{% for k in keys %}
+<tr>
+<td><tt>{{ k.id }}</tt></td>
+<td><tt>{{ k.label or "" }}</tt></td>
+<td><tt>{{ k.key_preview }}</tt></td>
+<td><tt>{{ k.status }}</tt></td>
+<td><tt>{{ k.last_used_at | fmt_ts }}</tt></td>
+<td><tt>{{ k.last_status_code or "" }}</tt></td>
+<td><tt>{{ k.cooldown_until | fmt_ts }}</tt></td>
+<td><tt>{{ k.total_requests }} / {{ k.total_failures }}</tt></td>
+<td>
+  {% set sess = k.session_usage_fraction | default(none) %}
+  {% set wk = k.weekly_usage_fraction | default(none) %}
+  {% if sess is none %}
+    <span class="progress-label"><tt>session: —</tt></span>
+  {% else %}
+    {% set sp = sess * 100 %}
+    {% set sw = 100 if sp > 100 else sp %}
+    {% set sn = " progress-near-full" if sp >= 85 else "" %}
+    <span class="progress compact{{ sn }}" aria-label="session usage">
+      <span class="progress-fill" style="width: {{ '%.1f'|format(sw) }}%"></span>
+    </span>
+    <span class="progress-label"><tt>24h: {{ '%.1f'|format(sp) }}%</tt></span>
+  {% endif %}
+  <br>
+  {% if wk is none %}
+    <span class="progress-label"><tt>weekly: —</tt></span>
+  {% else %}
+    {% set wp = wk * 100 %}
+    {% set ww = 100 if wp > 100 else wp %}
+    {% set wn = " progress-near-full" if wp >= 85 else "" %}
+    <span class="progress compact{{ wn }}" aria-label="weekly usage">
+      <span class="progress-fill" style="width: {{ '%.1f'|format(ww) }}%"></span>
+    </span>
+    <span class="progress-label"><tt>7d: {{ '%.1f'|format(wp) }}%</tt></span>
+  {% endif %}
+</td>
+<td style="white-space: nowrap">
+<a class="btn-link" href="/dashboard/keys/{{ k.id }}">edit</a>
+<a class="btn-link" href="/dashboard/keys/{{ k.id }}/usage">usage</a>
+<form method="post" action="/dashboard/keys/{{ k.id }}/delete" style="display:inline"
+      onsubmit="return confirm('delete key {{ k.id }} ({{ k.key_preview }})?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="submit" value="del" class="btn">
+</form>
+<form method="post" action="/dashboard/keys/{{ k.id }}/test" style="display:inline">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="submit" value="test" class="btn">
+</form>
+</td>
+</tr>
+{% endfor %}
+{% else %}
+<tr><td colspan="10" align="center"><p><i>no keys yet. add one to begin.</i></p></td></tr>
+{% endif %}
+</table>
+</td></tr>
+
+<tr><td>
+<table border="0" width="100%"><tr>
+<td style="white-space: nowrap">
+<form method="post" action="/dashboard/keys/test-all" style="display:inline">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="submit" value=" Test all active " class="btn">
+</form>
+<form method="post" action="/dashboard/keys/reset-states" style="display:inline"
+      onsubmit="return confirm('reset all keys back to active?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="submit" value=" Reset states " class="btn">
+</form>
+<form method="post" action="/dashboard/keys/usage/refresh-all" style="display:inline">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="submit" value=" Refresh usage (all active) " class="btn">
+</form>
+</td>
+</tr></table>
+</td></tr>
+</table>
+<p><tt>last check: never (click Refresh health)</tt></p>
+{% endblock %}

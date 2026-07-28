@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Usage — key #{{ key_id }}{% endblock %}
+
+{% block body %}
+<section class="card">
+  <header>
+    <h1>Usage — key #{{ key_id }}</h1>
+    <div class="actions">
+      <form method="get" action="/dashboard" style="display:inline">
+        <button class="btn-link" type="submit">[ back ]</button>
+      </form>
+    </div>
+  </header>
+
+  {% if error %}
+    <p class="flash error">{{ error }}</p>
+  {% endif %}
+  {% if flash %}{% if flash.level == "ok" %}<p><b>OK:</b> {{ flash.msg }}</p>{% else %}<p><b>ERROR:</b> {{ flash.msg }}</p>{% endif %}{% endif %}
+
+  <p class="meta">
+    Upstream status:
+    <strong class="status-{{ snapshot.upstream_status|default('pending') }}">
+      {{ snapshot.upstream_status|default('pending') }}
+    </strong>
+    {% if snapshot.upstream_error %}
+      — {{ snapshot.upstream_error }}
+    {% endif %}
+  </p>
+
+  <h2>Account</h2>
+  {% set account = snapshot.account %}
+  {% if account %}
+    <table class="kv">
+      <tr><th>Email</th><td>{{ account.email|default('—') }}</td></tr>
+      <tr><th>Plan</th><td>{{ account.plan|default('—') }}</td></tr>
+      <tr><th>Name</th><td>{{ account.name|default('—') }}</td></tr>
+      <tr><th>Fetched</th><td>{{ account.fetched_at|default('—') }}</td></tr>
+    </table>
+  {% else %}
+    <p class="meta">No account info yet.</p>
+  {% endif %}
+
+  <h2>Official (per-account)</h2>
+  {% set off = snapshot.official %}
+  {% if off %}
+    <table class="kv">
+      <tr>
+        <th>Session usage</th>
+        <td>
+          {% if off.session_usage_fraction is none %}
+            <tt>{{ off.session_usage }}</tt>
+          {% else %}
+            {% set sess_pct = off.session_usage_fraction * 100 %}
+            {% set sess_w = 100 if sess_pct > 100 else sess_pct %}
+            {% set sess_near = " progress-near-full" if sess_pct >= 85 else "" %}
+            <span class="progress{{ sess_near }}" aria-label="session usage">
+              <span class="progress-fill" style="width: {{ '%.1f'|format(sess_w) }}%"></span>
+            </span>
+            <span class="progress-label">
+              {{ '%.1f'|format(sess_pct) }}% {% if sess_pct > 100 %}— over limit{% endif %}
+            </span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <th>Weekly usage</th>
+        <td>
+          {% if off.weekly_usage_fraction is none %}
+            <tt>{{ off.weekly_usage }}</tt>
+          {% else %}
+            {% set wk_pct = off.weekly_usage_fraction * 100 %}
+            {% set wk_w = 100 if wk_pct > 100 else wk_pct %}
+            {% set wk_near = " progress-near-full" if wk_pct >= 85 else "" %}
+            <span class="progress{{ wk_near }}" aria-label="weekly usage">
+              <span class="progress-fill" style="width: {{ '%.1f'|format(wk_w) }}%"></span>
+            </span>
+            <span class="progress-label">
+              {{ '%.1f'|format(wk_pct) }}% {% if wk_pct > 100 %}— over limit{% endif %}
+            </span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr><th>Period</th>
+          <td>
+            {{ off.period_type|default('—') }}
+            {% if off.period_start %} from {{ off.period_start }}{% endif %}
+            {% if off.period_end %} to {{ off.period_end }}{% endif %}
+          </td>
+      </tr>
+      <tr><th>Fetched</th><td>{{ off.fetched_at|default('—') }}</td></tr>
+    </table>
+    <p class="meta">
+      ollama.com <code>/api/usage</code> reports <code>usage</code> as a
+      fraction in [0, 1] and does not expose an absolute total. The bar
+      above shows the share of the limit consumed in this window.
+    </p>
+    {% if off.models and off.models|length > 0 %}
+      <table class="table">
+        <thead>
+          <tr><th>Model</th><th>Session req</th><th>Weekly req</th></tr>
+        </thead>
+        <tbody>
+          {% for m in off.models %}
+            <tr>
+              <td>{{ m.name }}</td>
+              <td>{{ m.session_request_count }}</td>
+              <td>{{ m.weekly_request_count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  {% else %}
+    <p class="meta">No official snapshot yet.</p>
+  {% endif %}
+
+  <h2>Local cumsum (this key)</h2>
+  {% set cum = snapshot.local_cumsum %}
+  <table class="kv">
+    <tr><th>Session (24h) prompt</th>
+        <td>{{ cum.session_prompt_tokens }}</td></tr>
+    <tr><th>Session (24h) completion</th>
+        <td>{{ cum.session_completion_tokens }}</td></tr>
+    <tr><th>Session window started</th>
+        <td>{{ cum.session_window_started_at|default('—') }}</td></tr>
+    <tr><th>Weekly (7d) prompt</th>
+        <td>{{ cum.weekly_prompt_tokens }}</td></tr>
+    <tr><th>Weekly (7d) completion</th>
+        <td>{{ cum.weekly_completion_tokens }}</td></tr>
+    <tr><th>Weekly window started</th>
+        <td>{{ cum.weekly_window_started_at|default('—') }}</td></tr>
+    <tr><th>Last token at</th>
+        <td>{{ cum.last_token_at|default('—') }}</td></tr>
+    <tr><th>Window kind</th>
+        <td>{{ cum.window_kind|default('rolling_24h_7d') }}</td></tr>
+  </table>
+  <p class="meta">
+    Stream responses are not counted (the <code>usage</code> block
+    only appears in the final NDJSON chunk).
+  </p>
+
+  <h2>Refresh</h2>
+  <form method="post" action="/dashboard/keys/{{ key_id }}/usage/refresh">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn-primary" type="submit">Refresh now</button>
+  </form>
+</section>
+{% endblock %}

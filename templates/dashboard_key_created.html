@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}key created / ollama_proxy{% endblock %}
+{% block body %}
+<table width="600" border="1" cellpadding="6" cellspacing="0" bgcolor="#ffffff">
+<tr><td>
+<h2 align="center">api key created</h2>
+</td></tr>
+{% if raw_key %}
+<tr><td>
+<p><b>Copy this raw key now.</b> The proxy will only return it on
+this page, and it will not be shown again. The server stores
+only an encrypted copy; the dashboard has nothing else.</p>
+<pre style="background:#ffffe0;border:1px solid #808080;padding:8px;"><tt>{{ raw_key }}</tt></pre>
+<p>after you close or refresh this page the key is gone from the
+dashboard. you can find it later in the keys table (masked) but
+the raw value is not recoverable.</p>
+</td></tr>
+{% else %}
+<tr><td>
+<p><b>ERROR:</b> the raw key was not delivered. recreate the key
+and check the proxy logs.</p>
+</td></tr>
+{% endif %}
+<tr><td align="center">
+<form method="get" action="/dashboard" style="display:inline">
+<input type="submit" value=" Continue to dashboard " class="btn">
+</form>
+</td></tr>
+</table>
+{% endblock %}

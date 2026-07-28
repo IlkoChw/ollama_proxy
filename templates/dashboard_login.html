@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}login / ollama_proxy{% endblock %}
+{% block body %}
+<table width="400" border="1" cellpadding="8" cellspacing="0" bgcolor="#ffffff">
+<tr><td align="center">
+<h2>ollama_proxy / dashboard</h2>
+<p>enter the dashboard password to continue.</p>
+</td></tr>
+{% if error %}
+<tr><td><p><b>ERROR:</b> {{ error }}</p></td></tr>
+{% endif %}
+{% if flash %}
+<tr><td>
+{% if flash.level == "ok" %}<p><b>OK:</b> {{ flash.msg }}</p>
+{% else %}<p><b>ERROR:</b> {{ flash.msg }}</p>
+{% endif %}
+</td></tr>
+{% endif %}
+<tr><td>
+<form method="post" action="/dashboard/login" autocomplete="off">
+<table border="0" cellpadding="2" cellspacing="0">
+<tr>
+<td align="right"><tt>password:</tt></td>
+<td><input type="password" name="password" size="24" maxlength="512" autofocus></td>
+</tr>
+<tr>
+<td colspan="2" align="right"><input type="submit" value=" Login " class="btn"></td>
+</tr>
+</table>
+</form>
+</td></tr>
+<tr><td align="center"><p><a href="/dashboard">back</a> (you will be asked to log in)</p></td></tr>
+</table>
+{% endblock %}

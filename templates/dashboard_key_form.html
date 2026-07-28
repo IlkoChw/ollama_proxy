@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}new key / ollama_proxy{% endblock %}
+{% block body %}
+<table width="500" border="1" cellpadding="6" cellspacing="0" bgcolor="#ffffff">
+<tr><td>
+<h2 align="center">add api key</h2>
+<p>paste the ollama.com API key. it is sent to the proxy over HTTPS
+and stored encrypted; the raw value is shown to you <b>once</b> on
+the next page.</p>
+</td></tr>
+{% if error %}
+<tr><td><p><b>ERROR:</b> {{ error }}</p></td></tr>
+{% endif %}
+{% if flash %}
+<tr><td>
+{% if flash.level == "ok" %}<p><b>OK:</b> {{ flash.msg }}</p>
+{% else %}<p><b>ERROR:</b> {{ flash.msg }}</p>
+{% endif %}
+</td></tr>
+{% endif %}
+<tr><td>
+<form method="post" action="/dashboard/keys">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<table border="0" cellpadding="3" cellspacing="0">
+<tr>
+<td align="right"><tt>label:</tt></td>
+<td><input type="text" name="label" size="32" maxlength="255"></td>
+</tr>
+<tr>
+<td align="right" valign="top"><tt>key:</tt></td>
+<td><textarea name="key" rows="3" cols="48" maxlength="512" required></textarea></td>
+</tr>
+<tr>
+<td colspan="2" align="right">
+<input type="submit" value=" Create " class="btn">
+<a class="btn-link" href="/dashboard">Cancel</a>
+</td>
+</tr>
+</table>
+</form>
+</td></tr>
+</table>
+{% endblock %}
