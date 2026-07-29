@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin_token
@@ -15,8 +15,8 @@ from app.schemas.user_token import (
 from app.services.user_token_service import (
     create_token,
     get_token,
+    hard_delete_user_token,
     list_tokens,
-    revoke_token,
     update_token,
 )
 
@@ -124,19 +124,20 @@ async def patch_user_token(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return UserTokenOut.from_orm_token(updated)
 
-# -------------------------------------------------------------------- revoke
+# -------------------------------------------------------------------- delete
 
 @router.delete(
     "/{token_id}",
-    response_model=UserTokenOut,
-    summary="Revoke a user token (soft-delete)",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    summary="Hard-delete a user token (irreversible)",
 )
 async def revoke_user_token(
     token_id: int = Path(..., ge=1),
     session: AsyncSession = Depends(get_session),
-) -> UserTokenOut:
+) -> Response:
     orm_token = await get_token(session, token_id)
     if orm_token is None:
         raise HTTPException(status_code=404, detail="user token not found")
-    revoked = await revoke_token(session, orm_token)
-    return UserTokenOut.from_orm_token(revoked)
+    await hard_delete_user_token(session, token_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

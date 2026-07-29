@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}user tokens / ollama_proxy{% endblock %}
+{% block body %}
+<table width="900" border="1" cellpadding="6" cellspacing="0" bgcolor="#ffffff">
+<tr><td>
+<h2 align="center">ollama_proxy / user tokens</h2>
+<hr>
+<table border="0" width="100%"><tr>
+<td align="left" style="white-space: nowrap">
+<a class="btn-link" href="/dashboard/user-tokens/new">add token</a>
+&nbsp;
+<a class="btn-link" href="/dashboard">api keys</a>
+</td>
+<td align="right" style="white-space: nowrap">
+<form method="post" action="/dashboard/logout" style="display:inline">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="submit" value=" Logout " class="btn">
+</form>
+</td>
+</tr></table>
+</td></tr>
+
+{% if flash %}
+<tr><td>
+{% if flash.level == "ok" %}<p><b>OK:</b> {{ flash.msg }}</p>
+{% else %}<p><b>ERROR:</b> {{ flash.msg }}</p>
+{% endif %}
+</td></tr>
+{% endif %}
+
+{% if error %}
+<tr><td><p><b>ERROR:</b> {{ error }}</p></td></tr>
+{% endif %}
+
+<tr><td>
+<table border="0" width="100%" cellpadding="3" cellspacing="0"><tr>
+<td style="white-space: nowrap">
+<b>filter:</b>
+{% for s in statuses %}
+{% if s == current_status %}
+<span class="filter-active">[ {{ s }} ]</span>
+{% else %}
+<a class="btn-link" href="/dashboard/user-tokens?status={{ s }}">{{ s }}</a>
+{% endif %}
+{% endfor %}
+</td>
+<td align="right" style="white-space: nowrap">
+<tt>showing {{ tokens | length }} of {{ total_tokens }}</tt>
+</td>
+</tr></table>
+</td></tr>
+
+<tr><td>
+<table border="1" cellpadding="3" cellspacing="0" width="100%" bgcolor="#ffffff">
+<tr bgcolor="#c0c0c0">
+<th><tt>id</tt></th>
+<th><tt>label</tt></th>
+<th><tt>preview</tt></th>
+<th><tt>status</tt></th>
+<th><tt>expires at</tt></th>
+<th><tt>last used</tt></th>
+<th><tt>requests</tt></th>
+<th>actions</th>
+</tr>
+{% if tokens %}
+{% for t in tokens %}
+<tr>
+<td><tt>{{ t.id }}</tt></td>
+<td><tt>{{ t.label }}</tt></td>
+<td><tt>{{ t.key_preview }}</tt></td>
+<td><tt>{{ t.status }}</tt></td>
+<td><tt>{{ t.expires_at | fmt_ts }}</tt></td>
+<td><tt>{{ t.last_used_at | fmt_ts }}</tt></td>
+<td><tt>{{ t.total_requests }}</tt></td>
+<td style="white-space: nowrap">
+<a class="btn-link" href="/dashboard/user-tokens/{{ t.id }}">edit</a>
+<form method="post" action="/dashboard/user-tokens/{{ t.id }}/delete"
+      style="display:inline"
+      onsubmit="return confirm('permanently delete token {{ t.id }} ({{ t.key_preview }})?\nthis cannot be undone.');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="submit" value="del" class="btn">
+</form>
+</td>
+</tr>
+{% endfor %}
+{% else %}
+<tr><td colspan="8" align="center"><p><i>no tokens yet. add one to begin.</i></p></td></tr>
+{% endif %}
+</table>
+</td></tr>
+</table>
+{% endblock %}

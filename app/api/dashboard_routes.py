@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -14,6 +15,7 @@ from app.api.deps_dashboard import (
 )
 from app.core.config import get_settings
 from app.core.logging import logger
+from app.models.user_token import UserTokenStatus
 from app.services.dashboard_auth import (
     CSRF_COOKIE,
     FLASH_COOKIE,
@@ -26,12 +28,17 @@ from app.services.dashboard_backend import (
     InProcessDashboardBackend,
 )
 
-# Status values we want to show with a colour hint in the table.
+# Status values we want to show with a colour hint in the api-keys table.
 _VALID_STATUSES = {"active", "depleted", "disabled"}
 
 _STATUS_ALL = "all"
 
 _DEFAULT_STATUS_FILTER = "active"
+
+# User-token status filter — narrower set than api keys (no depleted/disabled).
+_VALID_USER_TOKEN_STATUSES = {s.value for s in UserTokenStatus}
+
+_DEFAULT_USER_TOKEN_STATUS_FILTER = UserTokenStatus.ACTIVE.value
 
 # --------------------------------------------------------------- helpers
 
@@ -795,6 +802,360 @@ async def usage_refresh_all_submit(
     _set_session_cookie(response, auth, _reissue_session(request, auth))
     return response
 
+# ------------------------------------------------------- user tokens (CRUD)
+
+@router.get("/dashboard/user-tokens", include_in_schema=False)
+async def user_tokens_home(
+    request: Request,
+    status: str = Query(
+        default=_DEFAULT_USER_TOKEN_STATUS_FILTER,
+        description=(
+            "Filter the tokens table by status. Default: ``active``. "
+            "Use ``all`` to show every token regardless of state."
+        ),
+    ),
+    auth: DashboardAuth = Depends(get_dashboard_auth_dep),
+) -> HTMLResponse:
+    session_id = get_dashboard_session(request, auth=auth)
+    if session_id is None:
+        return _redirect("/dashboard/login")
+    templates = _templates(request)
+    all_tokens: list[dict[str, Any]] = []
+    error: str | None = None
+    try:
+        async with _client_or_503(request) as client:
+            all_tokens = await client.list_user_tokens()
+    except DashboardClientError as exc:
+        error = exc.short
+        logger.warning("user_tokens_home: list_user_tokens failed: {}", exc)
+
+    if status == _STATUS_ALL:
+        current_status = _STATUS_ALL
+    elif status in _VALID_USER_TOKEN_STATUSES:
+        current_status = status
+    else:
+        current_status = _DEFAULT_USER_TOKEN_STATUS_FILTER
+
+    if current_status == _STATUS_ALL:
+        tokens = all_tokens
+    else:
+        tokens = [t for t in all_tokens if t.get("status") == current_status]
+    total_tokens = len(all_tokens)
+
+    flash: dict[str, Any] | None = None
+    csrf_token = _csrf_form_value(request, auth, session_id)
+
+    def _render() -> HTMLResponse:
+        response = templates.TemplateResponse(
+            request,
+            "dashboard_user_tokens.html",
+            {
+                "request": request,
+                "tokens": tokens,
+                "total_tokens": total_tokens,
+                "current_status": current_status,
+                "statuses": [_STATUS_ALL] + sorted(_VALID_USER_TOKEN_STATUSES),
+                "error": error,
+                "flash": flash,
+                "csrf_token": csrf_token,
+            },
+        )
+        _set_csrf_cookie(response, csrf_token, auth=auth)
+        return response
+
+    probe = _render()
+    flash = _read_flash(request, probe, auth)
+    response = _render()
+    _copy_set_cookies(probe, response)
+    _set_session_cookie(response, auth, _reissue_session(request, auth))
+    return response
+
+@router.get("/dashboard/user-tokens/new", include_in_schema=False)
+async def new_user_token_form(
+    request: Request,
+    auth: DashboardAuth = Depends(get_dashboard_auth_dep),
+) -> HTMLResponse:
+    session_id = get_dashboard_session(request, auth=auth)
+    if session_id is None:
+        return _redirect("/dashboard/login")
+    templates = _templates(request)
+    flash: dict[str, Any] | None = None
+    csrf_token = _csrf_form_value(request, auth, session_id)
+
+    def _render() -> HTMLResponse:
+        response = templates.TemplateResponse(
+            request,
+            "dashboard_user_token_form.html",
+            {
+                "request": request,
+                "error": None,
+                "flash": flash,
+                "csrf_token": csrf_token,
+            },
+        )
+        _set_csrf_cookie(response, csrf_token, auth=auth)
+        return response
+
+    probe = _render()
+    flash = _read_flash(request, probe, auth)
+    response = _render()
+    _copy_set_cookies(probe, response)
+    _set_session_cookie(response, auth, _reissue_session(request, auth))
+    return response
+
+@router.post("/dashboard/user-tokens", include_in_schema=False)
+async def create_user_token_submit(
+    request: Request,
+    label: str = Form(default=""),
+    expires_at: str = Form(default=""),
+    _csrf: None = Depends(require_dashboard_csrf),
+    auth: DashboardAuth = Depends(get_dashboard_auth_dep),
+) -> RedirectResponse:
+    session_id = get_dashboard_session(request, auth=auth)
+    if session_id is None:
+        return _redirect("/dashboard/login")
+    label_clean = label.strip()
+    if not label_clean:
+        response = _redirect("/dashboard/user-tokens/new")
+        _set_flash(response, auth, "error", "label is required")
+        _rotate_csrf(response, auth, session_id)
+        _set_session_cookie(response, auth, _reissue_session(request, auth))
+        return response
+    try:
+        expires_dt = _parse_user_token_expiry(expires_at)
+    except ValueError as exc:
+        response = _redirect("/dashboard/user-tokens/new")
+        _set_flash(
+            response,
+            auth,
+            "error",
+            f"invalid expires_at ({exc}); expected YYYY-MM-DDTHH:MM[:SS]",
+        )
+        _rotate_csrf(response, auth, session_id)
+        _set_session_cookie(response, auth, _reissue_session(request, auth))
+        return response
+    try:
+        async with _client_or_503(request) as client:
+            body = await client.create_user_token(
+                label=label_clean, expires_at=expires_dt
+            )
+    except DashboardClientError as exc:
+        response = _redirect("/dashboard/user-tokens/new")
+        _set_flash(response, auth, "error", exc.short)
+        _rotate_csrf(response, auth, session_id)
+        _set_session_cookie(response, auth, _reissue_session(request, auth))
+        return response
+    raw_key = body.get("raw_key", "")
+    if not raw_key:
+        response = _redirect("/dashboard/user-tokens")
+        _set_flash(
+            response,
+            auth,
+            "error",
+            "token created, but proxy did not return raw_key — recreate and check logs",
+        )
+        _rotate_csrf(response, auth, session_id)
+        _set_session_cookie(response, auth, _reissue_session(request, auth))
+        return response
+    response = _redirect("/dashboard/user-tokens/created")
+    _set_flash(response, auth, "ok", f"NEW_TOKEN::{raw_key}")
+    _rotate_csrf(response, auth, session_id)
+    _set_session_cookie(response, auth, _reissue_session(request, auth))
+    logger.info(
+        "create_user_token_submit: created token id={} label={}",
+        body.get("id"),
+        body.get("label"),
+    )
+    return response
+
+@router.get("/dashboard/user-tokens/created", include_in_schema=False)
+async def user_token_created(
+    request: Request,
+    auth: DashboardAuth = Depends(get_dashboard_auth_dep),
+) -> HTMLResponse:
+    session_id = get_dashboard_session(request, auth=auth)
+    if session_id is None:
+        return _redirect("/dashboard/login")
+    templates = _templates(request)
+    flash: dict[str, Any] | None = None
+    raw_key: str | None = None
+
+    csrf_token = _csrf_form_value(request, auth, session_id)
+
+    def _render() -> HTMLResponse:
+        response = templates.TemplateResponse(
+            request,
+            "dashboard_user_token_created.html",
+            {
+                "request": request,
+                "raw_key": raw_key,
+                "csrf_token": csrf_token,
+            },
+        )
+        _set_csrf_cookie(response, csrf_token, auth=auth)
+        return response
+
+    probe = _render()
+    flash = _read_flash(request, probe, auth)
+    if flash and flash.get("msg", "").startswith("NEW_TOKEN::"):
+        raw_key = flash["msg"][len("NEW_TOKEN::") :]
+    response = _render()
+    _copy_set_cookies(probe, response)
+    _set_session_cookie(response, auth, _reissue_session(request, auth))
+    return response
+
+@router.get("/dashboard/user-tokens/{token_id}", include_in_schema=False)
+async def edit_user_token_form(
+    token_id: int,
+    request: Request,
+    auth: DashboardAuth = Depends(get_dashboard_auth_dep),
+) -> HTMLResponse:
+    session_id = get_dashboard_session(request, auth=auth)
+    if session_id is None:
+        return _redirect("/dashboard/login")
+    templates = _templates(request)
+    try:
+        async with _client_or_503(request) as client:
+            token = await client.get_user_token(token_id)
+    except DashboardClientError as exc:
+        response = _redirect("/dashboard/user-tokens")
+        _set_flash(response, auth, "error", exc.short)
+        return response
+    flash: dict[str, Any] | None = None
+    csrf_token = _csrf_form_value(request, auth, session_id)
+
+    def _render() -> HTMLResponse:
+        response = templates.TemplateResponse(
+            request,
+            "dashboard_user_token_edit.html",
+            {
+                "request": request,
+                "token": token,
+                "error": None,
+                "flash": flash,
+                "csrf_token": csrf_token,
+                "valid_statuses": sorted(_VALID_USER_TOKEN_STATUSES),
+                "expires_at_value": _format_user_token_expiry(
+                    token.get("expires_at")
+                ),
+            },
+        )
+        _set_csrf_cookie(response, csrf_token, auth=auth)
+        return response
+
+    probe = _render()
+    flash = _read_flash(request, probe, auth)
+    response = _render()
+    _copy_set_cookies(probe, response)
+    _set_session_cookie(response, auth, _reissue_session(request, auth))
+    return response
+
+@router.post("/dashboard/user-tokens/{token_id}", include_in_schema=False)
+async def update_user_token_submit(
+    token_id: int,
+    request: Request,
+    label: str = Form(default=""),
+    expires_at: str = Form(default=""),
+    clear_expires_at: str = Form(default=""),
+    status: str = Form(default=""),
+    _csrf: None = Depends(require_dashboard_csrf),
+    auth: DashboardAuth = Depends(get_dashboard_auth_dep),
+) -> RedirectResponse:
+    session_id = get_dashboard_session(request, auth=auth)
+    if session_id is None:
+        return _redirect("/dashboard/login")
+    form = await request.form()
+    method = form.get("_method", "patch")
+    if method != "patch":
+        response = _redirect(f"/dashboard/user-tokens/{token_id}")
+        _set_flash(response, auth, "error", f"unsupported method: {method}")
+        _rotate_csrf(response, auth, session_id)
+        _set_session_cookie(response, auth, _reissue_session(request, auth))
+        return response
+    label_clean = label.strip() or None
+    status_clean = status.strip().lower() or None
+    if status_clean and status_clean not in _VALID_USER_TOKEN_STATUSES:
+        response = _redirect(f"/dashboard/user-tokens/{token_id}")
+        _set_flash(
+            response,
+            auth,
+            "error",
+            f"invalid status {status_clean!r}; expected one of {sorted(_VALID_USER_TOKEN_STATUSES)}",
+        )
+        _rotate_csrf(response, auth, session_id)
+        _set_session_cookie(response, auth, _reissue_session(request, auth))
+        return response
+    clear_flag = clear_expires_at.strip().lower() in {"1", "true", "on", "yes"}
+    try:
+        expires_dt = _parse_user_token_expiry(expires_at)
+    except ValueError as exc:
+        response = _redirect(f"/dashboard/user-tokens/{token_id}")
+        _set_flash(
+            response,
+            auth,
+            "error",
+            f"invalid expires_at ({exc}); expected YYYY-MM-DDTHH:MM[:SS]",
+        )
+        _rotate_csrf(response, auth, session_id)
+        _set_session_cookie(response, auth, _reissue_session(request, auth))
+        return response
+    # ``clear_expires_at`` overrides a present ``expires_at`` value.
+    expires_for_update: datetime | None
+    if clear_flag:
+        expires_for_update = None
+    else:
+        expires_for_update = expires_dt
+    try:
+        async with _client_or_503(request) as client:
+            await client.update_user_token(
+                token_id,
+                label=label_clean,
+                expires_at=expires_for_update,
+                clear_expires_at=clear_flag,
+                status=UserTokenStatus(status_clean)
+                if status_clean
+                else None,
+            )
+    except DashboardClientError as exc:
+        response = _redirect(f"/dashboard/user-tokens/{token_id}")
+        _set_flash(response, auth, "error", exc.short)
+        _rotate_csrf(response, auth, session_id)
+        _set_session_cookie(response, auth, _reissue_session(request, auth))
+        return response
+    response = _redirect("/dashboard/user-tokens")
+    _set_flash(response, auth, "ok", f"token {token_id} updated")
+    _rotate_csrf(response, auth, session_id)
+    _set_session_cookie(response, auth, _reissue_session(request, auth))
+    return response
+
+@router.post(
+    "/dashboard/user-tokens/{token_id}/delete",
+    include_in_schema=False,
+)
+async def delete_user_token_submit(
+    token_id: int,
+    request: Request,
+    _csrf: None = Depends(require_dashboard_csrf),
+    auth: DashboardAuth = Depends(get_dashboard_auth_dep),
+) -> RedirectResponse:
+    session_id = get_dashboard_session(request, auth=auth)
+    if session_id is None:
+        return _redirect("/dashboard/login")
+    try:
+        async with _client_or_503(request) as client:
+            await client.hard_delete_user_token(token_id)
+    except DashboardClientError as exc:
+        response = _redirect("/dashboard/user-tokens")
+        _set_flash(response, auth, "error", exc.short)
+        _rotate_csrf(response, auth, session_id)
+        _set_session_cookie(response, auth, _reissue_session(request, auth))
+        return response
+    response = _redirect("/dashboard/user-tokens")
+    _set_flash(response, auth, "ok", f"token {token_id} deleted")
+    _rotate_csrf(response, auth, session_id)
+    _set_session_cookie(response, auth, _reissue_session(request, auth))
+    return response
+
 # --------------------------------------------------------------- helpers
 
 def _reissue_session(request: Request, auth: DashboardAuth) -> str:
@@ -812,4 +1173,44 @@ def _rotate_csrf(
 ) -> None:
     new_token = auth.issue_csrf(session_id)
     _set_csrf_cookie(response, new_token, auth=auth)
+
+def _parse_user_token_expiry(raw: str) -> datetime | None:
+    """Parse a form ``expires_at`` value.
+
+    Accepts:
+    - empty / blank → ``None`` (caller must combine with ``clear_expires_at``).
+    - ``YYYY-MM-DDTHH:MM[:SS]`` (HTML5 ``datetime-local`` format) → naive
+      value treated as UTC.
+
+    Raises ``ValueError`` if the value is present but not a valid ISO 8601
+    string; the caller is responsible for surfacing the error via flash.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return None
+    # ``datetime-local`` may emit naive ISO. ``fromisoformat`` accepts that.
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    else:
+        dt = dt.astimezone(UTC)
+    return dt
+
+def _format_user_token_expiry(dt: datetime | None) -> str:
+    """Render a stored expiry as the HTML5 ``datetime-local`` ``value``.
+
+    Returns an empty string if the value is missing, so the input
+    renders blank in the form (matches the create form). The naive
+    ISO string we emit is what ``_parse_user_token_expiry`` accepts
+    on round-trip.
+    """
+    if dt is None:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    else:
+        dt = dt.astimezone(UTC)
+    # ``datetime-local`` ignores sub-minute precision in most browsers,
+    # but emitting seconds doesn't hurt.
+    return dt.strftime("%Y-%m-%dT%H:%M")
 

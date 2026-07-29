@@ -96,6 +96,21 @@ async def revoke_token(session: AsyncSession, token: UserToken) -> UserToken:
     logger.info("revoke_token: id={} preview={}", token.id, token.key_preview)
     return token
 
+async def hard_delete_user_token(session: AsyncSession, token_id: int) -> None:
+    """Permanently remove a user token row.
+
+    Unlike ``revoke_token``, this is **irreversible**: the raw key is lost
+    (only the SHA-256 hash was stored, so it cannot be recovered anyway),
+    and historical usage of the bearer is no longer attributable to a
+    record in ``user_tokens``.
+    """
+    token = await session.get(UserToken, token_id)
+    if token is None:
+        raise LookupError(f"user token {token_id} not found")
+    await session.delete(token)
+    await session.commit()
+    logger.info("hard_delete_user_token: id={}", token_id)
+
 # ----------------------------------------------------- authentication path
 
 def _as_utc(dt: datetime | None) -> datetime | None:
@@ -150,6 +165,7 @@ __all__: list[str] = [
     "generate_raw_key",
     "get_token",
     "has_any_active_token",
+    "hard_delete_user_token",
     "hash_key",
     "list_tokens",
     "prefix_of",

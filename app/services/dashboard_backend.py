@@ -14,11 +14,13 @@ from app.core.config import get_settings
 from app.core.logging import logger
 from app.db.session import get_session_factory
 from app.models.api_key import ApiKey, ApiKeyStatus
+from app.models.user_token import UserTokenStatus
 from app.schemas.api_key import (
     ApiKeyOut,
     ApiKeyTestResultWithKey,
     KeyUsageSnapshot,
 )
+from app.schemas.user_token import UserTokenOut
 from app.services._keys_ops import (
     DashboardClientError,
     ProbeClassifier,
@@ -33,6 +35,21 @@ from app.services._keys_ops import (
 from app.services.key_manager import KeyManager, get_key_manager
 from app.services.ollama_client import OllamaClient
 from app.services.usage_service import UsageService
+from app.services.user_token_service import (
+    create_token as service_create_token,
+)
+from app.services.user_token_service import (
+    get_token as service_get_token,
+)
+from app.services.user_token_service import (
+    hard_delete_user_token as svc_hard_delete_user_token,
+)
+from app.services.user_token_service import (
+    list_tokens as service_list_tokens,
+)
+from app.services.user_token_service import (
+    update_token as service_update_token,
+)
 from app.services.vault import get_vault
 
 
@@ -316,3 +333,106 @@ class InProcessDashboardBackend:
                 "total": len(snapshots),
                 "results": [snap.model_dump(mode="json") for snap in snapshots],
             }
+
+    # ----------------------------------------------------------- user tokens
+
+    async def list_user_tokens(self) -> list[dict[str, Any]]:
+        async with self._session() as session:
+            tokens = await service_list_tokens(session)
+            return [
+                UserTokenOut.from_orm_token(t).model_dump(mode="json")
+                for t in tokens
+            ]
+
+    async def get_user_token(self, token_id: int) -> dict[str, Any]:
+        async with self._session() as session:
+            token = await service_get_token(session, token_id)
+            if token is None:
+                raise DashboardClientError(
+                    status_code=404,
+                    body={"detail": "user token not found"},
+                    endpoint=f"GET /admin/user-tokens/{token_id}",
+                    source="in-process",
+                )
+            return UserTokenOut.from_orm_token(token).model_dump(mode="json")
+
+    async def create_user_token(
+        self,
+        label: str,
+        expires_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Mint a new user token. Returns the dict with ``raw_key`` set
+        (single-use — caller must not persist it beyond this response)."""
+        async with self._session() as session:
+            try:
+                orm_token, raw_key = await service_create_token(
+                    session=session,
+                    label=label,
+                    expires_at=expires_at,
+                )
+            except ValueError as exc:
+                raise DashboardClientError(
+                    status_code=422,
+                    body={"detail": str(exc)},
+                    endpoint="POST /admin/user-tokens",
+                    source="in-process",
+                ) from exc
+        payload = UserTokenOut.from_orm_token(orm_token).model_dump(mode="json")
+        # ``raw_key`` is single-use: only the dashboard's "created" page
+        # may display it; the backend never persists it.
+        payload["raw_key"] = raw_key
+        logger.info(
+            "dashboard: create_user_token id={} label={}",
+            orm_token.id,
+            orm_token.label,
+        )
+        return payload
+
+    async def update_user_token(
+        self,
+        token_id: int,
+        *,
+        label: str | None = None,
+        expires_at: datetime | None = None,
+        clear_expires_at: bool = False,
+        status: UserTokenStatus | None = None,
+    ) -> dict[str, Any]:
+        async with self._session() as session:
+            token = await service_get_token(session, token_id)
+            if token is None:
+                raise DashboardClientError(
+                    status_code=404,
+                    body={"detail": "user token not found"},
+                    endpoint=f"PATCH /admin/user-tokens/{token_id}",
+                    source="in-process",
+                )
+            try:
+                updated = await service_update_token(
+                    session,
+                    token,
+                    label=label,
+                    expires_at=expires_at,
+                    clear_expires_at=clear_expires_at,
+                    status=status,
+                )
+            except ValueError as exc:
+                raise DashboardClientError(
+                    status_code=422,
+                    body={"detail": str(exc)},
+                    endpoint=f"PATCH /admin/user-tokens/{token_id}",
+                    source="in-process",
+                ) from exc
+            return UserTokenOut.from_orm_token(updated).model_dump(mode="json")
+
+    async def hard_delete_user_token(self, token_id: int) -> None:
+        async with self._session() as session:
+            try:
+                await svc_hard_delete_user_token(session, token_id)
+            except LookupError as exc:
+                raise DashboardClientError(
+                    status_code=404,
+                    body={"detail": "user token not found"},
+                    endpoint=f"DELETE /admin/user-tokens/{token_id}",
+                    source="in-process",
+                ) from exc
+            logger.info("dashboard: hard_delete_user_token id={}", token_id)

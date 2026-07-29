@@ -6,7 +6,9 @@
 <h2 align="center">ollama_proxy / dashboard</h2>
 <hr>
 <table border="0" width="100%"><tr>
-<td align="left" style="white-space: nowrap"><a class="btn-link" href="/dashboard/keys/new">add key</a></td>
+<td align="left" style="white-space: nowrap"><a class="btn-link" href="/dashboard/keys/new">add key</a>
+&nbsp;
+<a class="btn-link" href="/dashboard/user-tokens">user tokens</a></td>
 <td align="center" style="white-space: nowrap">
 <form method="post" action="/dashboard/keys/refresh-health" style="display:inline">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

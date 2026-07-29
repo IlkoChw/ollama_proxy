@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}new user token / ollama_proxy{% endblock %}
+{% block body %}
+<table width="500" border="1" cellpadding="6" cellspacing="0" bgcolor="#ffffff">
+<tr><td>
+<h2 align="center">add user token</h2>
+<p>the proxy mints a fresh bearer of the form
+<tt>opk_&lt;32 url-safe bytes&gt;</tt>. the raw value is shown to you
+<b>once</b> on the next page; only the SHA-256 hash is stored.</p>
+</td></tr>
+{% if error %}
+<tr><td><p><b>ERROR:</b> {{ error }}</p></td></tr>
+{% endif %}
+{% if flash %}
+<tr><td>
+{% if flash.level == "ok" %}<p><b>OK:</b> {{ flash.msg }}</p>
+{% else %}<p><b>ERROR:</b> {{ flash.msg }}</p>
+{% endif %}
+</td></tr>
+{% endif %}
+<tr><td>
+<form method="post" action="/dashboard/user-tokens">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<table border="0" cellpadding="3" cellspacing="0">
+<tr>
+<td align="right"><tt>label:</tt></td>
+<td><input type="text" name="label" size="32" maxlength="255" required></td>
+</tr>
+<tr>
+<td align="right"><tt>expires at:</tt></td>
+<td>
+<input type="datetime-local" name="expires_at" size="32">
+<br><tt>(leave blank for a token that never expires)</tt>
+</td>
+</tr>
+<tr>
+<td colspan="2" align="right">
+<input type="submit" value=" Create " class="btn">
+<a class="btn-link" href="/dashboard/user-tokens">Cancel</a>
+</td>
+</tr>
+</table>
+</form>
+</td></tr>
+</table>
+{% endblock %}
